@@ -13,6 +13,7 @@ This MCP server exposes tools for managing key DefectDojo entities:
 *   **Product Types:** List product type categories.
 *   **Engagements:** List, retrieve details, create, update, and close engagements.
 *   **Tests:** List and retrieve test (scan run) details.
+*   **Users & Groups:** List users, get user profiles, list groups and group members.
 
 ## Installation & Running
 
@@ -107,6 +108,10 @@ The following tools are available via the MCP interface:
 *   `close_engagement`: Mark an engagement as completed.
 *   `list_tests`: List tests (scan runs) with filtering by engagement, test type, and tags.
 *   `get_test`: Get a specific test by its ID.
+*   `list_users`: List DefectDojo users with filtering by username, name, and active status.
+*   `get_user`: Get a specific user by their ID with full profile details.
+*   `list_dojo_groups`: List DefectDojo groups (teams) with optional name filtering.
+*   `list_dojo_group_members`: List members of DefectDojo groups with optional group/user filtering.
 
 ## Usage Examples
 
@@ -375,6 +380,61 @@ result = await use_mcp_tool("defectdojo", "list_tests", {
 # Get a specific test by ID
 result = await use_mcp_tool("defectdojo", "get_test", {
     "test_id": 18550
+})
+```
+
+### List Users
+
+```python
+# List all active users
+result = await use_mcp_tool("defectdojo", "list_users", {
+    "is_active": True
+})
+
+# Find a user by username
+result = await use_mcp_tool("defectdojo", "list_users", {
+    "username": "admin"
+})
+
+# Find users by name
+result = await use_mcp_tool("defectdojo", "list_users", {
+    "first_name": "John",
+    "is_active": True
+})
+```
+
+### Get User
+
+```python
+# Get a specific user profile by ID
+result = await use_mcp_tool("defectdojo", "get_user", {
+    "user_id": 1
+})
+```
+
+### List Groups
+
+```python
+# List all DefectDojo groups
+result = await use_mcp_tool("defectdojo", "list_dojo_groups", {})
+
+# Filter groups by name
+result = await use_mcp_tool("defectdojo", "list_dojo_groups", {
+    "name": "AppSec"
+})
+```
+
+### List Group Members
+
+```python
+# List all members of a specific group
+result = await use_mcp_tool("defectdojo", "list_dojo_group_members", {
+    "group_id": 3
+})
+
+# Find which groups a user belongs to
+result = await use_mcp_tool("defectdojo", "list_dojo_group_members", {
+    "user_id": 42
 })
 ```
 

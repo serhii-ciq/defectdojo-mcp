@@ -103,6 +103,24 @@ class DefectDojoClient:
         """Update an existing engagement."""
         return await self._request("PATCH", f"/api/v2/engagements/{engagement_id}/", json=data)
 
+    # --- User & Group Methods ---
+
+    async def get_users(self, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Get users with optional filters."""
+        return await self._request("GET", "/api/v2/users/", params=filters)
+
+    async def get_user(self, user_id: int) -> Dict[str, Any]:
+        """Get a specific user by ID."""
+        return await self._request("GET", f"/api/v2/users/{user_id}/")
+
+    async def get_dojo_groups(self, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Get DefectDojo groups with optional filters."""
+        return await self._request("GET", "/api/v2/dojo_groups/", params=filters)
+
+    async def get_dojo_group_members(self, filters: Optional[Dict[str, Any]] = None) -> Dict[str, Any]:
+        """Get DefectDojo group members with optional filters."""
+        return await self._request("GET", "/api/v2/dojo_group_members/", params=filters)
+
 # --- Client Factory ---
 
 def get_client(validate_token=True, base_url=None, token=None) -> DefectDojoClient:
