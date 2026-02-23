@@ -357,6 +357,31 @@ async def create_finding(title: str, test_id: int, severity: str, description: s
     return {"status": "success", "data": result}
 
 
+async def get_finding(finding_id: int) -> Dict[str, Any]:
+    """Get a specific finding by its ID.
+
+    Returns the full finding object including notes, tags, endpoints,
+    and all metadata fields.
+
+    Args:
+        finding_id: The unique identifier of the finding.
+
+    Returns:
+        Dictionary with status and finding data or error.
+    """
+    client = get_client()
+    result = await client.get_finding(finding_id)
+
+    if "error" in result:
+        return {
+            "status": "error",
+            "error": result["error"],
+            "details": result.get("details", ""),
+        }
+
+    return {"status": "success", "data": result}
+
+
 # --- Registration Function ---
 
 def register_tools(mcp):
@@ -364,6 +389,7 @@ def register_tools(mcp):
     mcp.tool(name="get_findings", description="Get findings with filtering options and pagination support")(get_findings)
     mcp.tool(name="search_findings", description="Search for findings using a text query with pagination support")(search_findings)
     mcp.tool(name="count_findings", description="Return total number of findings matching the given filters (lightweight, no full payload)")(count_findings)
+    mcp.tool(name="get_finding", description="Get a specific finding by its ID with full details")(get_finding)
     mcp.tool(name="update_finding_status", description="Update the status of a finding (Active, Verified, False Positive, Mitigated, Inactive)")(update_finding_status)
     mcp.tool(name="add_finding_note", description="Add a note to a finding")(add_finding_note)
     mcp.tool(name="create_finding", description="Create a new finding")(create_finding)

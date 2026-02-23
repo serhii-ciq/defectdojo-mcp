@@ -190,6 +190,70 @@ async def count_products(
     return response
 
 
+async def get_product(product_id: int) -> Dict[str, Any]:
+    """Get a specific product by its ID.
+
+    Args:
+        product_id: The unique identifier of the product.
+
+    Returns:
+        Dictionary with status and product data or error.
+    """
+    client = get_client()
+    result = await client.get_product(product_id)
+
+    if "error" in result:
+        return {
+            "status": "error",
+            "error": result["error"],
+            "details": result.get("details", ""),
+        }
+
+    return {"status": "success", "data": result}
+
+
+async def list_product_types(
+    name: Optional[str] = None,
+    limit: int = 50,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """List all product types with optional filtering and pagination.
+
+    Product types are used to categorize products (e.g. "Web Applications",
+    "Docker Images", "Infrastructure").
+
+    Args:
+        name: Optional name filter (partial match).
+        limit: Maximum number of product types to return per page (default: 50).
+        offset: Number of records to skip (default: 0).
+
+    Returns:
+        Dictionary with status, data/error, and pagination metadata.
+    """
+    filters: Dict[str, Any] = {"limit": limit, "o": "id"}
+
+    if name:
+        filters["name"] = name
+    if offset:
+        filters["offset"] = offset
+
+    client = get_client()
+    result = await client.get_product_types(filters)
+
+    if "error" in result:
+        return {
+            "status": "error",
+            "error": result["error"],
+            "details": result.get("details", ""),
+        }
+
+    applied = {k: v for k, v in filters.items() if k not in ("limit", "offset", "o")}
+    response: Dict[str, Any] = {"status": "success", "data": result}
+    if applied:
+        response["applied_filters"] = applied
+    return response
+
+
 # --- Registration Function ---
 
 
@@ -203,3 +267,11 @@ def register_tools(mcp):
         name="count_products",
         description="Return total number of products matching the given filters (lightweight, no full payload)",
     )(count_products)
+    mcp.tool(
+        name="get_product",
+        description="Get a specific product by its ID",
+    )(get_product)
+    mcp.tool(
+        name="list_product_types",
+        description="List all product types (categories) with optional filtering and pagination",
+    )(list_product_types)
