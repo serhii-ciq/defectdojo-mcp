@@ -92,7 +92,8 @@ The following tools are available via the MCP interface:
 *   `update_finding_status`: Change the status of a specific finding (e.g., Active, Verified, False Positive).
 *   `add_finding_note`: Add a textual note to a finding.
 *   `create_finding`: Create a new finding associated with a test.
-*   `list_products`: List products with filtering (name, prod_type) and pagination.
+*   `list_products`: List products with filtering (name, prod_type, tags, external_audience, internet_accessible) and pagination.
+*   `count_products`: Return total number of products matching the given filters (lightweight, no full payload).
 *   `list_engagements`: List engagements with filtering (product_id, status, name) and pagination.
 *   `get_engagement`: Get details for a specific engagement by its ID.
 *   `create_engagement`: Create a new engagement for a product.
@@ -163,6 +164,55 @@ result = await use_mcp_tool("defectdojo", "create_finding", {
 result = await use_mcp_tool("defectdojo", "list_products", {
     "name": "Web App",
     "limit": 10
+})
+
+# Filter products by tag
+result = await use_mcp_tool("defectdojo", "list_products", {
+    "tags": "full_sdlc"
+})
+
+# Filter by multiple tags (AND mode — products must have all tags)
+result = await use_mcp_tool("defectdojo", "list_products", {
+    "tags": ["full_sdlc", "cloud"],
+    "tags_mode": "all"
+})
+
+# Filter by multiple tags (OR mode — products with any of the tags)
+result = await use_mcp_tool("defectdojo", "list_products", {
+    "tags": ["full_sdlc", "cloud"],
+    "tags_mode": "any"
+})
+
+# Filter by external_audience and internet_accessible
+result = await use_mcp_tool("defectdojo", "list_products", {
+    "external_audience": True,
+    "internet_accessible": True
+})
+
+# Combine multiple filters
+result = await use_mcp_tool("defectdojo", "list_products", {
+    "tags": "full_sdlc",
+    "external_audience": True,
+    "prod_type": 7,
+    "limit": 20
+})
+```
+
+### Count Products
+
+```python
+# Count all products
+result = await use_mcp_tool("defectdojo", "count_products", {})
+
+# Count products with a specific tag
+result = await use_mcp_tool("defectdojo", "count_products", {
+    "tags": "full_sdlc"
+})
+
+# Count with combined filters
+result = await use_mcp_tool("defectdojo", "count_products", {
+    "tags": "full_sdlc",
+    "external_audience": True
 })
 ```
 

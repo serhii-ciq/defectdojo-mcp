@@ -8,7 +8,7 @@ from .findings_tools import (
     add_finding_note,
     create_finding,
 )
-from .products_tools import list_products
+from .products_tools import list_products, count_products
 from .engagements_tools import (
     list_engagements,
     get_engagement,
@@ -59,6 +59,11 @@ def register_tools(mcp_instance: FastMCP):
         name="list_products",
         description="List all products with optional filtering and pagination support"
     )(list_products)
+
+    mcp.tool(
+        name="count_products",
+        description="Return total number of products matching the given filters (lightweight, no full payload)"
+    )(count_products)
 
     # Register Engagement Tools
     mcp.tool(
