@@ -1,90 +1,198 @@
 from typing import Any, Dict, List, Optional
-from defectdojo.client import get_client 
+from defectdojo.client import get_client
 
 # --- Finding Tool Definitions ---
 
-async def get_findings(product_name: Optional[str] = None, status: Optional[str] = None,
-                       severity: Optional[str] = None, limit: int = 20,
-                       offset: int = 0) -> Dict[str, Any]:
-    """Get findings with optional filters and pagination.
+
+def _build_findings_filters(
+    *,
+    product_name: Optional[str] = None,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    duplicate: Optional[bool] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Build a query-parameter dict accepted by the DefectDojo findings API.
 
     Args:
-        product_name: Optional product name filter
-        status: Optional status filter
-        severity: Optional severity filter
-        limit: Maximum number of findings to return per page (default: 20)
-        offset: Number of records to skip (default: 0)
+        product_name: Optional product name filter.
+        status: Optional status filter.
+        severity: Optional severity filter.
+        duplicate: Optional duplicate flag filter (True/False).
+        limit: Maximum number of findings to return per page.
+        offset: Number of records to skip.
 
     Returns:
-        Dictionary with status, data/error, and pagination metadata
+        Dictionary of query parameters.
     """
-    filters = {}
+    filters: Dict[str, Any] = {
+        "limit": limit,
+        "o": "id",  # deterministic ordering
+    }
+
     if product_name:
         filters["product_name"] = product_name
     if status:
         filters["status"] = status
     if severity:
         filters["severity"] = severity
-    if limit:
-        filters["limit"] = limit
+    if duplicate is not None:
+        filters["duplicate"] = duplicate
     if offset:
         filters["offset"] = offset
+
+    return filters
+
+
+async def get_findings(
+    product_name: Optional[str] = None,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    duplicate: Optional[bool] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> Dict[str, Any]:
+    """Get findings with optional filters and pagination.
+
+    Args:
+        product_name: Optional product name filter.
+        status: Optional status filter.
+        severity: Optional severity filter.
+        duplicate: Optional duplicate flag filter. Set to ``False`` to
+            exclude duplicates, ``True`` to return only duplicates.
+        limit: Maximum number of findings to return per page (default: 20).
+        offset: Number of records to skip (default: 0).
+
+    Returns:
+        Dictionary with status, data/error, and pagination metadata.
+    """
+    filters = _build_findings_filters(
+        product_name=product_name,
+        status=status,
+        severity=severity,
+        duplicate=duplicate,
+        limit=limit,
+        offset=offset,
+    )
 
     client = get_client()
     result = await client.get_findings(filters)
 
     if "error" in result:
-        return {"status": "error", "error": result["error"], "details": result.get("details", "")}
+        return {
+            "status": "error",
+            "error": result["error"],
+            "details": result.get("details", ""),
+        }
 
-    return {"status": "success", "data": result}
-
-
-# --- Registration Function ---
-
-def register_tools(mcp):
-    """Register finding-related tools with the MCP server instance."""
-    mcp.tool(name="get_findings", description="Get findings with filtering options and pagination support")(get_findings)
-    mcp.tool(name="search_findings", description="Search for findings using a text query with pagination support")(search_findings)
-    mcp.tool(name="update_finding_status", description="Update the status of a finding (Active, Verified, False Positive, Mitigated, Inactive)")(update_finding_status)
-    mcp.tool(name="add_finding_note", description="Add a note to a finding")(add_finding_note)
-    mcp.tool(name="create_finding", description="Create a new finding")(create_finding)
+    applied = {k: v for k, v in filters.items() if k not in ("limit", "offset", "o")}
+    response: Dict[str, Any] = {"status": "success", "data": result}
+    if applied:
+        response["applied_filters"] = applied
+    return response
 
 
-async def search_findings(query: str, product_name: Optional[str] = None,
-                         status: Optional[str] = None, severity: Optional[str] = None,
-                         limit: int = 20, offset: int = 0) -> Dict[str, Any]:
+async def search_findings(
+    query: str,
+    product_name: Optional[str] = None,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    duplicate: Optional[bool] = None,
+    limit: int = 20,
+    offset: int = 0,
+) -> Dict[str, Any]:
     """Search for findings using a text query with pagination.
 
     Args:
-        query: Text to search for in findings
-        product_name: Optional product name filter
-        status: Optional status filter
-        severity: Optional severity filter
-        limit: Maximum number of findings to return per page (default: 20)
-        offset: Number of records to skip (default: 0)
+        query: Text to search for in findings.
+        product_name: Optional product name filter.
+        status: Optional status filter.
+        severity: Optional severity filter.
+        duplicate: Optional duplicate flag filter. Set to ``False`` to
+            exclude duplicates, ``True`` to return only duplicates.
+        limit: Maximum number of findings to return per page (default: 20).
+        offset: Number of records to skip (default: 0).
 
     Returns:
-        Dictionary with status, data/error, and pagination metadata
+        Dictionary with status, data/error, and pagination metadata.
     """
-    filters = {}
-    if product_name:
-        filters["product_name"] = product_name
-    if status:
-        filters["status"] = status
-    if severity:
-        filters["severity"] = severity
-    if limit:
-        filters["limit"] = limit
-    if offset:
-        filters["offset"] = offset
+    filters = _build_findings_filters(
+        product_name=product_name,
+        status=status,
+        severity=severity,
+        duplicate=duplicate,
+        limit=limit,
+        offset=offset,
+    )
 
     client = get_client()
     result = await client.search_findings(query, filters)
 
     if "error" in result:
-        return {"status": "error", "error": result["error"], "details": result.get("details", "")}
+        return {
+            "status": "error",
+            "error": result["error"],
+            "details": result.get("details", ""),
+        }
 
-    return {"status": "success", "data": result}
+    applied = {k: v for k, v in filters.items() if k not in ("limit", "offset", "o")}
+    applied["query"] = query
+    response: Dict[str, Any] = {"status": "success", "data": result}
+    if applied:
+        response["applied_filters"] = applied
+    return response
+
+
+async def count_findings(
+    product_name: Optional[str] = None,
+    status: Optional[str] = None,
+    severity: Optional[str] = None,
+    duplicate: Optional[bool] = None,
+) -> Dict[str, Any]:
+    """Return the total number of findings matching the given filters.
+
+    This is a lightweight alternative to ``get_findings`` when you only
+    need the count.  It requests a single record (``limit=1``) and reads
+    the ``count`` field from the paginated response.
+
+    Args:
+        product_name: Optional product name filter.
+        status: Optional status filter.
+        severity: Optional severity filter.
+        duplicate: Optional duplicate flag filter. Set to ``False`` to
+            exclude duplicates, ``True`` to return only duplicates.
+
+    Returns:
+        Dictionary with status and total count.
+    """
+    filters = _build_findings_filters(
+        product_name=product_name,
+        status=status,
+        severity=severity,
+        duplicate=duplicate,
+        limit=1,  # minimize payload – we only need the count
+        offset=0,
+    )
+
+    client = get_client()
+    result = await client.get_findings(filters)
+
+    if "error" in result:
+        return {
+            "status": "error",
+            "error": result["error"],
+            "details": result.get("details", ""),
+        }
+
+    applied = {k: v for k, v in filters.items() if k not in ("limit", "offset", "o")}
+    response: Dict[str, Any] = {
+        "status": "success",
+        "count": result.get("count", 0),
+    }
+    if applied:
+        response["applied_filters"] = applied
+    return response
 
 
 async def update_finding_status(finding_id: int, status: str) -> Dict[str, Any]:
@@ -231,3 +339,15 @@ async def create_finding(title: str, test_id: int, severity: str, description: s
         return {"status": "error", "error": result["error"], "details": result.get("details", "")}
 
     return {"status": "success", "data": result}
+
+
+# --- Registration Function ---
+
+def register_tools(mcp):
+    """Register finding-related tools with the MCP server instance."""
+    mcp.tool(name="get_findings", description="Get findings with filtering options and pagination support")(get_findings)
+    mcp.tool(name="search_findings", description="Search for findings using a text query with pagination support")(search_findings)
+    mcp.tool(name="count_findings", description="Return total number of findings matching the given filters (lightweight, no full payload)")(count_findings)
+    mcp.tool(name="update_finding_status", description="Update the status of a finding (Active, Verified, False Positive, Mitigated, Inactive)")(update_finding_status)
+    mcp.tool(name="add_finding_note", description="Add a note to a finding")(add_finding_note)
+    mcp.tool(name="create_finding", description="Create a new finding")(create_finding)

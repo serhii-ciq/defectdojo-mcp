@@ -87,8 +87,9 @@ If you installed the package using `pip`, the configuration would look like this
 
 The following tools are available via the MCP interface:
 
-*   `get_findings`: Retrieve findings with filtering (product_name, status, severity) and pagination (limit, offset).
-*   `search_findings`: Search findings using a text query, with filtering and pagination.
+*   `get_findings`: Retrieve findings with filtering (product_name, status, severity, duplicate) and pagination (limit, offset).
+*   `search_findings`: Search findings using a text query, with filtering (including duplicate) and pagination.
+*   `count_findings`: Return total number of findings matching the given filters (lightweight, no full payload).
 *   `update_finding_status`: Change the status of a specific finding (e.g., Active, Verified, False Positive).
 *   `add_finding_note`: Add a textual note to a finding.
 *   `create_finding`: Create a new finding associated with a test.
@@ -115,6 +116,24 @@ result = await use_mcp_tool("defectdojo", "get_findings", {
     "severity": "High",
     "limit": 10
 })
+
+# Get only unique (non-duplicate) findings
+result = await use_mcp_tool("defectdojo", "get_findings", {
+    "duplicate": False
+})
+
+# Get only duplicate findings
+result = await use_mcp_tool("defectdojo", "get_findings", {
+    "duplicate": True
+})
+
+# Combine filters: active high-severity non-duplicate findings
+result = await use_mcp_tool("defectdojo", "get_findings", {
+    "severity": "High",
+    "status": "Active",
+    "duplicate": False,
+    "limit": 50
+})
 ```
 
 ### Search Findings
@@ -123,6 +142,31 @@ result = await use_mcp_tool("defectdojo", "get_findings", {
 # Search for findings containing 'SQL Injection'
 result = await use_mcp_tool("defectdojo", "search_findings", {
     "query": "SQL Injection"
+})
+
+# Search excluding duplicates
+result = await use_mcp_tool("defectdojo", "search_findings", {
+    "query": "SQL Injection",
+    "duplicate": False
+})
+```
+
+### Count Findings
+
+```python
+# Count all findings
+result = await use_mcp_tool("defectdojo", "count_findings", {})
+
+# Count unique (non-duplicate) findings only
+result = await use_mcp_tool("defectdojo", "count_findings", {
+    "duplicate": False
+})
+
+# Count with combined filters
+result = await use_mcp_tool("defectdojo", "count_findings", {
+    "severity": "Critical",
+    "status": "Active",
+    "duplicate": False
 })
 ```
 
