@@ -4,6 +4,7 @@ from mcp.server.fastmcp import FastMCP
 from .findings_tools import (
     get_findings,
     search_findings,
+    count_findings,
     update_finding_status,
     add_finding_note,
     create_finding,
@@ -48,6 +49,11 @@ def register_tools(mcp_instance: FastMCP):
         name="add_finding_note",
         description="Add a note to a finding"
     )(add_finding_note)
+
+    mcp.tool(
+        name="count_findings",
+        description="Return total number of findings matching the given filters (lightweight, no full payload)"
+    )(count_findings)
 
     mcp.tool(
         name="create_finding",
