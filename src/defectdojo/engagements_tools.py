@@ -19,7 +19,7 @@ async def list_engagements(product_id: Optional[int] = None,
     Returns:
         Dictionary with status, data/error, and pagination metadata
     """
-    filters = {"limit": limit}
+    filters = {"limit": limit, "o": "-updated"}
     if product_id:
         filters["product"] = product_id
     if status:
