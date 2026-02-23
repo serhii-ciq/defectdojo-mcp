@@ -90,9 +90,9 @@ If you installed the package using `pip`, the configuration would look like this
 
 The following tools are available via the MCP interface:
 
-*   `get_findings`: Retrieve findings with filtering (product_name, severity, active, is_mitigated, duplicate) and pagination (limit, offset).
-*   `search_findings`: Search findings using a text query, with filtering (active, is_mitigated, duplicate) and pagination.
-*   `count_findings`: Return total number of findings matching the given filters (lightweight, no full payload).
+*   `get_findings`: Retrieve findings with filtering (product_name, severity, active, is_mitigated, duplicate, engagement_id) and pagination (limit, offset).
+*   `search_findings`: Search findings using a text query, with filtering (active, is_mitigated, duplicate, engagement_id) and pagination.
+*   `count_findings`: Return total number of findings matching the given filters (lightweight, no full payload). Supports engagement_id for per-engagement counts.
 *   `get_finding`: Get a specific finding by its ID with full details.
 *   `update_finding_status`: Change the status of a specific finding (e.g., Active, Verified, False Positive).
 *   `add_finding_note`: Add a textual note to a finding.
@@ -149,6 +149,13 @@ result = await use_mcp_tool("defectdojo", "get_findings", {
     "duplicate": False,
     "limit": 50
 })
+
+# Get findings scoped to a specific engagement
+result = await use_mcp_tool("defectdojo", "get_findings", {
+    "engagement_id": 17002,
+    "active": True,
+    "severity": "High"
+})
 ```
 
 ### Search Findings
@@ -164,6 +171,12 @@ result = await use_mcp_tool("defectdojo", "search_findings", {
     "query": "SQL Injection",
     "active": True,
     "duplicate": False
+})
+
+# Search findings within a specific engagement
+result = await use_mcp_tool("defectdojo", "search_findings", {
+    "query": "SQL Injection",
+    "engagement_id": 17002
 })
 ```
 
@@ -188,6 +201,19 @@ result = await use_mcp_tool("defectdojo", "count_findings", {
     "severity": "Critical",
     "active": True,
     "duplicate": False
+})
+
+# Count findings in a specific engagement
+result = await use_mcp_tool("defectdojo", "count_findings", {
+    "engagement_id": 17002,
+    "active": True
+})
+
+# Count critical findings in a specific engagement
+result = await use_mcp_tool("defectdojo", "count_findings", {
+    "engagement_id": 17002,
+    "severity": "Critical",
+    "active": True
 })
 ```
 

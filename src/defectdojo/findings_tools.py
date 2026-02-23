@@ -11,6 +11,7 @@ def _build_findings_filters(
     active: Optional[bool] = None,
     is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
+    engagement_id: Optional[int] = None,
     limit: int = 20,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -30,6 +31,8 @@ def _build_findings_filters(
             ``False`` = inactive/closed findings.
         is_mitigated: Filter by mitigation state.
         duplicate: Filter by duplicate flag.
+        engagement_id: Optional engagement ID to scope findings to a specific
+            engagement (maps to ``test__engagement`` API parameter).
         limit: Maximum number of findings to return per page.
         offset: Number of records to skip.
 
@@ -51,6 +54,8 @@ def _build_findings_filters(
         filters["is_mitigated"] = is_mitigated
     if duplicate is not None:
         filters["duplicate"] = duplicate
+    if engagement_id is not None:
+        filters["test__engagement"] = engagement_id
     if offset:
         filters["offset"] = offset
 
@@ -63,6 +68,7 @@ async def get_findings(
     active: Optional[bool] = None,
     is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
+    engagement_id: Optional[int] = None,
     limit: int = 20,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -76,6 +82,7 @@ async def get_findings(
         is_mitigated: Filter by mitigation state.
         duplicate: Filter by duplicate flag. ``False`` to exclude duplicates,
             ``True`` to return only duplicates.
+        engagement_id: Optional engagement ID to scope findings to a specific engagement.
         limit: Maximum number of findings to return per page (default: 20).
         offset: Number of records to skip (default: 0).
 
@@ -88,6 +95,7 @@ async def get_findings(
         active=active,
         is_mitigated=is_mitigated,
         duplicate=duplicate,
+        engagement_id=engagement_id,
         limit=limit,
         offset=offset,
     )
@@ -116,6 +124,7 @@ async def search_findings(
     active: Optional[bool] = None,
     is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
+    engagement_id: Optional[int] = None,
     limit: int = 20,
     offset: int = 0,
 ) -> Dict[str, Any]:
@@ -130,6 +139,7 @@ async def search_findings(
         is_mitigated: Filter by mitigation state.
         duplicate: Filter by duplicate flag. ``False`` to exclude duplicates,
             ``True`` to return only duplicates.
+        engagement_id: Optional engagement ID to scope findings to a specific engagement.
         limit: Maximum number of findings to return per page (default: 20).
         offset: Number of records to skip (default: 0).
 
@@ -142,6 +152,7 @@ async def search_findings(
         active=active,
         is_mitigated=is_mitigated,
         duplicate=duplicate,
+        engagement_id=engagement_id,
         limit=limit,
         offset=offset,
     )
@@ -170,6 +181,7 @@ async def count_findings(
     active: Optional[bool] = None,
     is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
+    engagement_id: Optional[int] = None,
 ) -> Dict[str, Any]:
     """Return the total number of findings matching the given filters.
 
@@ -185,6 +197,7 @@ async def count_findings(
         is_mitigated: Filter by mitigation state.
         duplicate: Filter by duplicate flag. ``False`` to exclude duplicates,
             ``True`` to return only duplicates.
+        engagement_id: Optional engagement ID to scope findings to a specific engagement.
 
     Returns:
         Dictionary with status and total count.
@@ -195,6 +208,7 @@ async def count_findings(
         active=active,
         is_mitigated=is_mitigated,
         duplicate=duplicate,
+        engagement_id=engagement_id,
         limit=1,  # minimize payload – we only need the count
         offset=0,
     )
