@@ -5,11 +5,12 @@ from .findings_tools import (
     get_findings,
     search_findings,
     count_findings,
+    get_finding,
     update_finding_status,
     add_finding_note,
     create_finding,
 )
-from .products_tools import list_products, count_products
+from .products_tools import list_products, count_products, get_product, list_product_types
 from .engagements_tools import (
     list_engagements,
     get_engagement,
@@ -17,6 +18,7 @@ from .engagements_tools import (
     update_engagement,
     close_engagement,
 )
+from .tests_tools import list_tests, get_test
 
 # Placeholder for the MCP instance - will be set by the main script
 mcp = None
@@ -56,6 +58,11 @@ def register_tools(mcp_instance: FastMCP):
     )(count_findings)
 
     mcp.tool(
+        name="get_finding",
+        description="Get a specific finding by its ID with full details"
+    )(get_finding)
+
+    mcp.tool(
         name="create_finding",
         description="Create a new finding"
     )(create_finding)
@@ -70,6 +77,16 @@ def register_tools(mcp_instance: FastMCP):
         name="count_products",
         description="Return total number of products matching the given filters (lightweight, no full payload)"
     )(count_products)
+
+    mcp.tool(
+        name="get_product",
+        description="Get a specific product by its ID"
+    )(get_product)
+
+    mcp.tool(
+        name="list_product_types",
+        description="List all product types (categories) with optional filtering and pagination"
+    )(list_product_types)
 
     # Register Engagement Tools
     mcp.tool(
@@ -97,3 +114,14 @@ def register_tools(mcp_instance: FastMCP):
         name="close_engagement",
         description="Close an engagement"
     )(close_engagement)
+
+    # Register Test Tools
+    mcp.tool(
+        name="list_tests",
+        description="List tests (scan runs) with optional filtering by engagement, test type, and tags"
+    )(list_tests)
+
+    mcp.tool(
+        name="get_test",
+        description="Get a specific test by its ID"
+    )(get_test)

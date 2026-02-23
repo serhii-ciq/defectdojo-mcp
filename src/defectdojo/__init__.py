@@ -2,7 +2,7 @@ import os
 from mcp.server.fastmcp import FastMCP
 
 # Import registration functions
-from defectdojo import findings_tools, products_tools, engagements_tools
+from defectdojo import findings_tools, products_tools, engagements_tools, tests_tools
 
 # Initialize FastMCP server
 mcp = FastMCP("defectdojo")
@@ -11,6 +11,7 @@ mcp = FastMCP("defectdojo")
 findings_tools.register_tools(mcp)
 products_tools.register_tools(mcp)
 engagements_tools.register_tools(mcp)
+tests_tools.register_tools(mcp)
 
 
 def main():
