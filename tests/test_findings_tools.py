@@ -23,11 +23,11 @@ PAGINATED_RESPONSE: Dict[str, Any] = {
     "next": None,
     "previous": None,
     "results": [
-        {"id": 1, "title": "XSS", "duplicate": False},
-        {"id": 2, "title": "SQLi", "duplicate": False},
-        {"id": 3, "title": "CSRF", "duplicate": True},
-        {"id": 4, "title": "XSS dup", "duplicate": True},
-        {"id": 5, "title": "SSRF", "duplicate": False},
+        {"id": 1, "title": "XSS", "active": True, "duplicate": False},
+        {"id": 2, "title": "SQLi", "active": True, "duplicate": False},
+        {"id": 3, "title": "CSRF", "active": False, "duplicate": True},
+        {"id": 4, "title": "XSS dup", "active": True, "duplicate": True},
+        {"id": 5, "title": "SSRF", "active": False, "duplicate": False},
     ],
 }
 
@@ -64,13 +64,33 @@ class TestBuildFindingsFilters:
         filters = _build_findings_filters(product_name="MyApp")
         assert filters["product_name"] == "MyApp"
 
-    def test_status(self):
-        filters = _build_findings_filters(status="Active")
-        assert filters["status"] == "Active"
-
     def test_severity(self):
         filters = _build_findings_filters(severity="High")
         assert filters["severity"] == "High"
+
+    def test_active_true(self):
+        filters = _build_findings_filters(active=True)
+        assert filters["active"] is True
+
+    def test_active_false(self):
+        filters = _build_findings_filters(active=False)
+        assert filters["active"] is False
+
+    def test_active_none_omitted(self):
+        filters = _build_findings_filters(active=None)
+        assert "active" not in filters
+
+    def test_is_mitigated_true(self):
+        filters = _build_findings_filters(is_mitigated=True)
+        assert filters["is_mitigated"] is True
+
+    def test_is_mitigated_false(self):
+        filters = _build_findings_filters(is_mitigated=False)
+        assert filters["is_mitigated"] is False
+
+    def test_is_mitigated_none_omitted(self):
+        filters = _build_findings_filters(is_mitigated=None)
+        assert "is_mitigated" not in filters
 
     def test_duplicate_false(self):
         filters = _build_findings_filters(duplicate=False)
@@ -91,15 +111,17 @@ class TestBuildFindingsFilters:
     def test_combined(self):
         filters = _build_findings_filters(
             product_name="App",
-            status="Active",
             severity="High",
+            active=True,
+            is_mitigated=False,
             duplicate=False,
             limit=10,
             offset=20,
         )
         assert filters["product_name"] == "App"
-        assert filters["status"] == "Active"
         assert filters["severity"] == "High"
+        assert filters["active"] is True
+        assert filters["is_mitigated"] is False
         assert filters["duplicate"] is False
         assert filters["limit"] == 10
         assert filters["offset"] == 20
@@ -108,6 +130,12 @@ class TestBuildFindingsFilters:
     def test_deterministic_ordering(self):
         filters = _build_findings_filters()
         assert filters["o"] == "id"
+
+    def test_no_status_parameter(self):
+        """Verify that the old broken 'status' parameter is not accepted."""
+        # _build_findings_filters should not accept 'status' keyword
+        with pytest.raises(TypeError):
+            _build_findings_filters(status="Active")
 
 
 # ---------------------------------------------------------------------------
@@ -129,6 +157,35 @@ class TestGetFindings:
         assert "applied_filters" not in result
 
     @pytest.mark.asyncio
+    async def test_active_true(self):
+        mock = _mock_client()
+        with patch("defectdojo.findings_tools.get_client", return_value=mock):
+            result = await get_findings(active=True)
+
+        assert result["status"] == "success"
+        assert result["applied_filters"]["active"] is True
+        call_args = mock.get_findings.call_args[0][0]
+        assert call_args["active"] is True
+
+    @pytest.mark.asyncio
+    async def test_active_false(self):
+        mock = _mock_client()
+        with patch("defectdojo.findings_tools.get_client", return_value=mock):
+            result = await get_findings(active=False)
+
+        assert result["status"] == "success"
+        assert result["applied_filters"]["active"] is False
+
+    @pytest.mark.asyncio
+    async def test_is_mitigated(self):
+        mock = _mock_client()
+        with patch("defectdojo.findings_tools.get_client", return_value=mock):
+            result = await get_findings(is_mitigated=True)
+
+        assert result["status"] == "success"
+        assert result["applied_filters"]["is_mitigated"] is True
+
+    @pytest.mark.asyncio
     async def test_duplicate_false(self):
         mock = _mock_client()
         with patch("defectdojo.findings_tools.get_client", return_value=mock):
@@ -136,30 +193,19 @@ class TestGetFindings:
 
         assert result["status"] == "success"
         assert result["applied_filters"]["duplicate"] is False
-        call_args = mock.get_findings.call_args[0][0]
-        assert call_args["duplicate"] is False
 
     @pytest.mark.asyncio
-    async def test_duplicate_true(self):
-        mock = _mock_client()
-        with patch("defectdojo.findings_tools.get_client", return_value=mock):
-            result = await get_findings(duplicate=True)
-
-        assert result["status"] == "success"
-        assert result["applied_filters"]["duplicate"] is True
-
-    @pytest.mark.asyncio
-    async def test_combined_severity_status_duplicate(self):
+    async def test_combined_severity_active_duplicate(self):
         mock = _mock_client()
         with patch("defectdojo.findings_tools.get_client", return_value=mock):
             result = await get_findings(
-                severity="High", status="Active", duplicate=False
+                severity="Critical", active=True, duplicate=False
             )
 
         assert result["status"] == "success"
         applied = result["applied_filters"]
-        assert applied["severity"] == "High"
-        assert applied["status"] == "Active"
+        assert applied["severity"] == "Critical"
+        assert applied["active"] is True
         assert applied["duplicate"] is False
 
     @pytest.mark.asyncio
@@ -172,17 +218,17 @@ class TestGetFindings:
         assert result["error"] == "HTTP error: 500"
 
     @pytest.mark.asyncio
-    async def test_backward_compat_no_duplicate(self):
-        """Existing callers that omit duplicate should still work."""
+    async def test_backward_compat_no_active(self):
+        """Callers that omit active/is_mitigated should still work."""
         mock = _mock_client()
         with patch("defectdojo.findings_tools.get_client", return_value=mock):
             result = await get_findings(product_name="Legacy", severity="Medium")
 
         assert result["status"] == "success"
         call_args = mock.get_findings.call_args[0][0]
-        assert "duplicate" not in call_args
+        assert "active" not in call_args
+        assert "is_mitigated" not in call_args
         assert call_args["product_name"] == "Legacy"
-        assert call_args["severity"] == "Medium"
 
     @pytest.mark.asyncio
     async def test_deterministic_ordering(self):
@@ -212,12 +258,13 @@ class TestSearchFindings:
         assert result["applied_filters"]["query"] == "XSS"
 
     @pytest.mark.asyncio
-    async def test_search_with_duplicate_false(self):
+    async def test_search_with_active_and_duplicate(self):
         mock = _mock_client()
         with patch("defectdojo.findings_tools.get_client", return_value=mock):
-            result = await search_findings(query="SQL", duplicate=False)
+            result = await search_findings(query="SQL", active=True, duplicate=False)
 
         assert result["status"] == "success"
+        assert result["applied_filters"]["active"] is True
         assert result["applied_filters"]["duplicate"] is False
         assert result["applied_filters"]["query"] == "SQL"
 
@@ -250,6 +297,26 @@ class TestCountFindings:
         assert call_args["limit"] == 1
 
     @pytest.mark.asyncio
+    async def test_count_active_true(self):
+        mock = _mock_client(get_response={"count": 80, "results": []})
+        with patch("defectdojo.findings_tools.get_client", return_value=mock):
+            result = await count_findings(active=True)
+
+        assert result["status"] == "success"
+        assert result["count"] == 80
+        assert result["applied_filters"]["active"] is True
+
+    @pytest.mark.asyncio
+    async def test_count_active_false(self):
+        mock = _mock_client(get_response={"count": 20, "results": []})
+        with patch("defectdojo.findings_tools.get_client", return_value=mock):
+            result = await count_findings(active=False)
+
+        assert result["status"] == "success"
+        assert result["count"] == 20
+        assert result["applied_filters"]["active"] is False
+
+    @pytest.mark.asyncio
     async def test_count_duplicate_false(self):
         mock = _mock_client(get_response={"count": 42, "results": []})
         with patch("defectdojo.findings_tools.get_client", return_value=mock):
@@ -260,28 +327,18 @@ class TestCountFindings:
         assert result["applied_filters"]["duplicate"] is False
 
     @pytest.mark.asyncio
-    async def test_count_duplicate_true(self):
-        mock = _mock_client(get_response={"count": 58, "results": []})
-        with patch("defectdojo.findings_tools.get_client", return_value=mock):
-            result = await count_findings(duplicate=True)
-
-        assert result["status"] == "success"
-        assert result["count"] == 58
-        assert result["applied_filters"]["duplicate"] is True
-
-    @pytest.mark.asyncio
     async def test_count_combined_filters(self):
         mock = _mock_client(get_response={"count": 10, "results": []})
         with patch("defectdojo.findings_tools.get_client", return_value=mock):
             result = await count_findings(
-                severity="High", status="Active", duplicate=False
+                severity="Critical", active=True, duplicate=False
             )
 
         assert result["status"] == "success"
         assert result["count"] == 10
         applied = result["applied_filters"]
-        assert applied["severity"] == "High"
-        assert applied["status"] == "Active"
+        assert applied["severity"] == "Critical"
+        assert applied["active"] is True
         assert applied["duplicate"] is False
 
     @pytest.mark.asyncio
@@ -297,9 +354,9 @@ class TestCountFindings:
         mock_count = _mock_client(get_response={"count": 15, "results": []})
 
         with patch("defectdojo.findings_tools.get_client", return_value=mock_list):
-            list_result = await get_findings(duplicate=False)
+            list_result = await get_findings(active=True, duplicate=False)
         with patch("defectdojo.findings_tools.get_client", return_value=mock_count):
-            count_result = await count_findings(duplicate=False)
+            count_result = await count_findings(active=True, duplicate=False)
 
         assert list_result["data"]["count"] == count_result["count"]
 

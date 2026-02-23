@@ -7,19 +7,29 @@ from defectdojo.client import get_client
 def _build_findings_filters(
     *,
     product_name: Optional[str] = None,
-    status: Optional[str] = None,
     severity: Optional[str] = None,
+    active: Optional[bool] = None,
+    is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
     limit: int = 20,
     offset: int = 0,
 ) -> Dict[str, Any]:
     """Build a query-parameter dict accepted by the DefectDojo findings API.
 
+    DefectDojo v2 ``/api/v2/findings/`` does **not** support a ``status``
+    query parameter.  Filtering by state is done through boolean fields:
+
+    * ``active`` – ``True`` for open findings, ``False`` for closed.
+    * ``is_mitigated`` – ``True`` for mitigated findings.
+    * ``duplicate`` – ``True`` / ``False``.
+
     Args:
         product_name: Optional product name filter.
-        status: Optional status filter.
-        severity: Optional severity filter.
-        duplicate: Optional duplicate flag filter (True/False).
+        severity: Optional severity filter (Critical, High, Medium, Low, Info).
+        active: Filter by active state.  ``True`` = open findings,
+            ``False`` = inactive/closed findings.
+        is_mitigated: Filter by mitigation state.
+        duplicate: Filter by duplicate flag.
         limit: Maximum number of findings to return per page.
         offset: Number of records to skip.
 
@@ -33,10 +43,12 @@ def _build_findings_filters(
 
     if product_name:
         filters["product_name"] = product_name
-    if status:
-        filters["status"] = status
     if severity:
         filters["severity"] = severity
+    if active is not None:
+        filters["active"] = active
+    if is_mitigated is not None:
+        filters["is_mitigated"] = is_mitigated
     if duplicate is not None:
         filters["duplicate"] = duplicate
     if offset:
@@ -47,8 +59,9 @@ def _build_findings_filters(
 
 async def get_findings(
     product_name: Optional[str] = None,
-    status: Optional[str] = None,
     severity: Optional[str] = None,
+    active: Optional[bool] = None,
+    is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
     limit: int = 20,
     offset: int = 0,
@@ -57,10 +70,12 @@ async def get_findings(
 
     Args:
         product_name: Optional product name filter.
-        status: Optional status filter.
-        severity: Optional severity filter.
-        duplicate: Optional duplicate flag filter. Set to ``False`` to
-            exclude duplicates, ``True`` to return only duplicates.
+        severity: Optional severity filter (Critical, High, Medium, Low, Info).
+        active: Filter by active state.  ``True`` = open findings,
+            ``False`` = inactive/closed findings.
+        is_mitigated: Filter by mitigation state.
+        duplicate: Filter by duplicate flag. ``False`` to exclude duplicates,
+            ``True`` to return only duplicates.
         limit: Maximum number of findings to return per page (default: 20).
         offset: Number of records to skip (default: 0).
 
@@ -69,8 +84,9 @@ async def get_findings(
     """
     filters = _build_findings_filters(
         product_name=product_name,
-        status=status,
         severity=severity,
+        active=active,
+        is_mitigated=is_mitigated,
         duplicate=duplicate,
         limit=limit,
         offset=offset,
@@ -96,8 +112,9 @@ async def get_findings(
 async def search_findings(
     query: str,
     product_name: Optional[str] = None,
-    status: Optional[str] = None,
     severity: Optional[str] = None,
+    active: Optional[bool] = None,
+    is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
     limit: int = 20,
     offset: int = 0,
@@ -107,10 +124,12 @@ async def search_findings(
     Args:
         query: Text to search for in findings.
         product_name: Optional product name filter.
-        status: Optional status filter.
-        severity: Optional severity filter.
-        duplicate: Optional duplicate flag filter. Set to ``False`` to
-            exclude duplicates, ``True`` to return only duplicates.
+        severity: Optional severity filter (Critical, High, Medium, Low, Info).
+        active: Filter by active state.  ``True`` = open findings,
+            ``False`` = inactive/closed findings.
+        is_mitigated: Filter by mitigation state.
+        duplicate: Filter by duplicate flag. ``False`` to exclude duplicates,
+            ``True`` to return only duplicates.
         limit: Maximum number of findings to return per page (default: 20).
         offset: Number of records to skip (default: 0).
 
@@ -119,8 +138,9 @@ async def search_findings(
     """
     filters = _build_findings_filters(
         product_name=product_name,
-        status=status,
         severity=severity,
+        active=active,
+        is_mitigated=is_mitigated,
         duplicate=duplicate,
         limit=limit,
         offset=offset,
@@ -146,8 +166,9 @@ async def search_findings(
 
 async def count_findings(
     product_name: Optional[str] = None,
-    status: Optional[str] = None,
     severity: Optional[str] = None,
+    active: Optional[bool] = None,
+    is_mitigated: Optional[bool] = None,
     duplicate: Optional[bool] = None,
 ) -> Dict[str, Any]:
     """Return the total number of findings matching the given filters.
@@ -158,18 +179,21 @@ async def count_findings(
 
     Args:
         product_name: Optional product name filter.
-        status: Optional status filter.
-        severity: Optional severity filter.
-        duplicate: Optional duplicate flag filter. Set to ``False`` to
-            exclude duplicates, ``True`` to return only duplicates.
+        severity: Optional severity filter (Critical, High, Medium, Low, Info).
+        active: Filter by active state.  ``True`` = open findings,
+            ``False`` = inactive/closed findings.
+        is_mitigated: Filter by mitigation state.
+        duplicate: Filter by duplicate flag. ``False`` to exclude duplicates,
+            ``True`` to return only duplicates.
 
     Returns:
         Dictionary with status and total count.
     """
     filters = _build_findings_filters(
         product_name=product_name,
-        status=status,
         severity=severity,
+        active=active,
+        is_mitigated=is_mitigated,
         duplicate=duplicate,
         limit=1,  # minimize payload – we only need the count
         offset=0,
@@ -215,11 +239,10 @@ async def update_finding_status(finding_id: int, status: str) -> Dict[str, Any]:
         data["verified"] = True
     elif status_lower == "mitigated":
         data["active"] = False
-        data["mitigated"] = True # Assuming API uses 'mitigated' boolean field
+        data["mitigated"] = True
     elif status_lower == "inactive":
         data["active"] = False
     elif status_lower != "active":
-        # Check against API specific values if needed, or raise error for unsupported input
         return {"status": "error", "error": f"Unsupported status: {status}. Use Active, Verified, False Positive, Mitigated, or Inactive."}
 
     # Clear conflicting flags if setting a specific status
@@ -229,19 +252,18 @@ async def update_finding_status(finding_id: int, status: str) -> Dict[str, Any]:
         data.pop("mitigated", None)
     elif data.get("verified"):
          data.pop("false_p", None)
-         # Verified implies active usually, but check API docs if explicit setting is needed
          data["active"] = True
          data.pop("mitigated", None)
     elif data.get("mitigated"):
          data.pop("false_p", None)
          data.pop("verified", None)
-         data["active"] = False # Mitigated implies inactive
-    elif not data.get("active", True): # Handling "Inactive" case
+         data["active"] = False
+    elif not data.get("active", True):
          data.pop("false_p", None)
          data.pop("verified", None)
          data.pop("mitigated", None)
          data["active"] = False
-    else: # Handling "Active" case (default or explicit)
+    else:
          data.pop("false_p", None)
          data.pop("verified", None)
          data.pop("mitigated", None)
@@ -298,15 +320,12 @@ async def create_finding(title: str, test_id: int, severity: str, description: s
     Returns:
         Dictionary with status and data/error
     """
-    # Validate severity (case-insensitive check, but send capitalized)
     valid_severities = ["critical", "high", "medium", "low", "info"]
     normalized_severity = severity.lower()
     if normalized_severity not in valid_severities:
-        # Use title case for user-facing error message
         valid_display = [s.title() for s in valid_severities]
         return {"status": "error", "error": f"Invalid severity '{severity}'. Must be one of: {', '.join(valid_display)}"}
 
-    # Use title case for API
     api_severity = severity.title()
 
     data = {
@@ -314,17 +333,14 @@ async def create_finding(title: str, test_id: int, severity: str, description: s
         "test": test_id,
         "severity": api_severity,
         "description": description,
-        # Set defaults expected by API if not provided explicitly by user?
-        # e.g., "active": True, "verified": False? Check API docs.
         "active": True,
         "verified": False,
     }
 
-    # Add optional fields if provided
     if cwe is not None:
         data["cwe"] = cwe
     if cvssv3:
-        data["cvssv3"] = cvssv3 # Assuming API accepts the string directly
+        data["cvssv3"] = cvssv3
     if mitigation:
         data["mitigation"] = mitigation
     if impact:
