@@ -26,7 +26,7 @@ async def list_tests(
     Returns:
         Dictionary with status, data/error, and pagination metadata.
     """
-    filters: Dict[str, Any] = {"limit": limit, "o": "-id"}
+    filters: Dict[str, Any] = {"limit": limit}
 
     if engagement_id is not None:
         filters["engagement"] = engagement_id
