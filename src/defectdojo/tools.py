@@ -19,6 +19,7 @@ from .engagements_tools import (
     close_engagement,
 )
 from .tests_tools import list_tests, get_test
+from .users_tools import list_users, get_user, list_dojo_groups, list_dojo_group_members
 
 # Placeholder for the MCP instance - will be set by the main script
 mcp = None
@@ -125,3 +126,24 @@ def register_tools(mcp_instance: FastMCP):
         name="get_test",
         description="Get a specific test by its ID"
     )(get_test)
+
+    # Register User & Group Tools
+    mcp.tool(
+        name="list_users",
+        description="List DefectDojo users with optional filtering by username, name, and active status"
+    )(list_users)
+
+    mcp.tool(
+        name="get_user",
+        description="Get a specific DefectDojo user by their ID"
+    )(get_user)
+
+    mcp.tool(
+        name="list_dojo_groups",
+        description="List DefectDojo groups (teams) with optional name filtering"
+    )(list_dojo_groups)
+
+    mcp.tool(
+        name="list_dojo_group_members",
+        description="List members of DefectDojo groups with optional group/user filtering"
+    )(list_dojo_group_members)
