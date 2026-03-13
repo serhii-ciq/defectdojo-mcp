@@ -101,7 +101,7 @@ The following tools are available via the MCP interface:
 *   `count_products`: Return total number of products matching the given filters (lightweight, no full payload).
 *   `get_product`: Get a specific product by its ID.
 *   `list_product_types`: List all product type categories with optional name filtering and pagination.
-*   `list_engagements`: List engagements with filtering (product_id, status, name) and pagination.
+*   `list_engagements`: List engagements with filtering (product_id, status, name) and pagination. Also supports derived filters: `stale_only`, `active_recent_days`, `overdue_days`.
 *   `get_engagement`: Get details for a specific engagement by its ID.
 *   `create_engagement`: Create a new engagement for a product.
 *   `update_engagement`: Modify details of an existing engagement.
@@ -339,11 +339,42 @@ result = await use_mcp_tool("defectdojo", "count_products", {
 
 ### List Engagements
 
+`list_engagements` supports direct parameters (`status`, `limit`, `offset`, `stale_only`, etc.).
+For backward compatibility, legacy wrappers can still pass `filters` (JSON string), `page_size`, and `page_token`.
+
 ```python
 # List 'In Progress' engagements for product ID 42
 result = await use_mcp_tool("defectdojo", "list_engagements", {
     "product_id": 42,
     "status": "In Progress"
+})
+
+# List the 3 most recently updated active engagements from the last 7 days
+result = await use_mcp_tool("defectdojo", "list_engagements", {
+    "active_recent_days": 7,
+    "limit": 3
+})
+
+# List the 10 most recently updated overdue engagements (target_end older than 7 days)
+result = await use_mcp_tool("defectdojo", "list_engagements", {
+    "overdue_days": 7,
+    "limit": 10
+})
+
+# List stale engagements (active + In Progress + old activity or overdue)
+# Defaults: updated older than 14 days OR overdue by 7+ days
+result = await use_mcp_tool("defectdojo", "list_engagements", {
+    "stale_only": True,
+    "limit": 10
+})
+
+# Fine-tune stale thresholds:
+# stale if updated older than 21 days OR overdue by at least 3 days
+result = await use_mcp_tool("defectdojo", "list_engagements", {
+    "stale_only": True,
+    "active_recent_days": 21,
+    "overdue_days": 3,
+    "limit": 10
 })
 ```
 

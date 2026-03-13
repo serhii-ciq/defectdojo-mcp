@@ -1,12 +1,190 @@
+import json
+from datetime import date, datetime, timedelta, timezone
 from typing import Any, Dict, Optional, List
+from urllib.parse import parse_qs
 from defectdojo.client import get_client
 
 # --- Engagement Tool Definitions ---
+VALID_ENGAGEMENT_STATUSES = [
+    "Not Started",
+    "Blocked",
+    "Cancelled",
+    "Completed",
+    "In Progress",
+    "On Hold",
+    "Waiting for Resource",
+]
+
+
+def _parse_iso_datetime(value: Any) -> Optional[datetime]:
+    """Parse ISO datetime values returned by DefectDojo into UTC."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return None
+    if parsed.tzinfo is None:
+        return parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc)
+
+
+def _parse_iso_date(value: Any) -> Optional[date]:
+    """Parse ISO date values returned by DefectDojo."""
+    if not isinstance(value, str) or not value:
+        return None
+    try:
+        return date.fromisoformat(value)
+    except ValueError:
+        return None
+
+
+def _coerce_bool(value: Any) -> Optional[bool]:
+    """Convert common bool-like values into bool."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        normalized = value.strip().lower()
+        if normalized in {"true", "1", "yes", "y"}:
+            return True
+        if normalized in {"false", "0", "no", "n"}:
+            return False
+    return None
+
+
+def _coerce_int(value: Any) -> Optional[int]:
+    """Convert integer-like values into int."""
+    if isinstance(value, bool):
+        return None
+    if isinstance(value, int):
+        return value
+    if isinstance(value, str):
+        try:
+            return int(value.strip())
+        except ValueError:
+            return None
+    return None
+
+
+def _parse_legacy_offset(value: Any) -> Optional[int]:
+    """Parse offset from legacy page token values."""
+    parsed_int = _coerce_int(value)
+    if parsed_int is not None:
+        return parsed_int
+    if isinstance(value, str) and "offset=" in value:
+        query = parse_qs(value.lstrip("?"))
+        offsets = query.get("offset")
+        if offsets:
+            return _coerce_int(offsets[0])
+    return None
+
+
+def _load_legacy_filters(filters: Optional[Any]) -> Optional[Dict[str, Any]]:
+    """Load legacy JSON filters payload into a dictionary."""
+    if not filters:
+        return {}
+    if isinstance(filters, dict):
+        return filters
+    if not isinstance(filters, str):
+        return None
+    try:
+        parsed = json.loads(filters)
+    except json.JSONDecodeError:
+        return None
+    if isinstance(parsed, dict):
+        return parsed
+    return None
+
+
+def _matches_derived_filters(
+    engagement: Dict[str, Any],
+    now_utc: datetime,
+    stale_only: bool,
+    active_recent_days: Optional[int],
+    overdue_days: Optional[int],
+) -> bool:
+    """Apply local post-filters that are not directly exposed in tool params."""
+    if stale_only:
+        stale_recent_days = 14 if active_recent_days is None else active_recent_days
+        stale_overdue_days = 7 if overdue_days is None else overdue_days
+
+        if not engagement.get("active"):
+            return False
+        if engagement.get("status") != "In Progress":
+            return False
+
+        updated_at = _parse_iso_datetime(engagement.get("updated"))
+        target_end = _parse_iso_date(engagement.get("target_end"))
+
+        stale_by_update = (
+            updated_at is not None
+            and updated_at < (now_utc - timedelta(days=stale_recent_days))
+        )
+        stale_by_overdue = (
+            target_end is not None
+            and target_end <= (now_utc.date() - timedelta(days=stale_overdue_days))
+        )
+        return stale_by_update or stale_by_overdue
+
+    if active_recent_days is not None:
+        if not engagement.get("active"):
+            return False
+        updated_at = _parse_iso_datetime(engagement.get("updated"))
+        if updated_at is None:
+            return False
+        if updated_at < (now_utc - timedelta(days=active_recent_days)):
+            return False
+
+    if overdue_days is not None:
+        target_end = _parse_iso_date(engagement.get("target_end"))
+        if target_end is None:
+            return False
+        if target_end > (now_utc.date() - timedelta(days=overdue_days)):
+            return False
+
+    return True
+
+
+def _build_applied_filters(
+    product_id: Optional[int],
+    status: Optional[str],
+    name: Optional[str],
+    stale_only: bool,
+    active_recent_days: Optional[int],
+    overdue_days: Optional[int],
+) -> Dict[str, Any]:
+    """Build user-visible filter metadata for response payloads."""
+    applied: Dict[str, Any] = {}
+    if product_id is not None:
+        applied["product"] = product_id
+    if status is not None:
+        applied["status"] = status
+    if name is not None:
+        applied["name"] = name
+
+    if stale_only:
+        applied["stale_only"] = True
+        applied["stale_recent_days"] = 14 if active_recent_days is None else active_recent_days
+        applied["stale_overdue_days"] = 7 if overdue_days is None else overdue_days
+        return applied
+
+    if active_recent_days is not None:
+        applied["active_recent_days"] = active_recent_days
+    if overdue_days is not None:
+        applied["overdue_days"] = overdue_days
+    return applied
 
 async def list_engagements(product_id: Optional[int] = None,
                           status: Optional[str] = None,
                           name: Optional[str] = None,
-                          limit: int = 20, offset: int = 0) -> Dict[str, Any]:
+                          limit: int = 20,
+                          offset: int = 0,
+                          stale_only: bool = False,
+                          active_recent_days: Optional[int] = None,
+                          overdue_days: Optional[int] = None,
+                          filters: Optional[Any] = None,
+                          page_size: Optional[str] = None,
+                          page_token: Optional[str] = None) -> Dict[str, Any]:
     """List engagements with optional filtering and pagination.
 
     Args:
@@ -15,31 +193,165 @@ async def list_engagements(product_id: Optional[int] = None,
         name: Optional name filter (partial match)
         limit: Maximum number of engagements to return per page (default: 20)
         offset: Number of records to skip (default: 0)
+        stale_only: Return only stale engagements (active + In Progress + stale by age or due date).
+            Uses stale defaults: updated older than 14 days OR overdue by more than 7 days.
+        active_recent_days: Return only active engagements updated in the last N days.
+            When stale_only=True, this becomes the stale recency threshold (defaults to 14).
+        overdue_days: Return only engagements with target_end older than N days.
+            When stale_only=True, this becomes the stale overdue threshold (defaults to 7).
+        filters: Backward-compatible legacy filters (JSON object string or object).
+        page_size: Backward-compatible alias for limit.
+        page_token: Backward-compatible alias for offset or 'offset=...&limit=...'.
 
     Returns:
         Dictionary with status, data/error, and pagination metadata
     """
-    filters = {"limit": limit, "o": "-updated"}
+    legacy_filters = _load_legacy_filters(filters)
+    if legacy_filters is None:
+        return {"status": "error", "error": "filters must be a JSON object string"}
+
+    legacy_product = legacy_filters.get("product_id", legacy_filters.get("product"))
+    if product_id is None and legacy_product is not None:
+        parsed_product = _coerce_int(legacy_product)
+        if parsed_product is None:
+            return {"status": "error", "error": "Invalid product_id in filters"}
+        product_id = parsed_product
+
+    if status is None and isinstance(legacy_filters.get("status"), str):
+        status = legacy_filters["status"]
+    if name is None and isinstance(legacy_filters.get("name"), str):
+        name = legacy_filters["name"]
+
+    if not stale_only and "stale_only" in legacy_filters:
+        legacy_stale_only = _coerce_bool(legacy_filters.get("stale_only"))
+        if legacy_stale_only is None:
+            return {"status": "error", "error": "Invalid stale_only in filters"}
+        stale_only = legacy_stale_only
+
+    if active_recent_days is None and "active_recent_days" in legacy_filters:
+        active_recent_days = _coerce_int(legacy_filters.get("active_recent_days"))
+        if active_recent_days is None:
+            return {"status": "error", "error": "Invalid active_recent_days in filters"}
+
+    if overdue_days is None and "overdue_days" in legacy_filters:
+        overdue_days = _coerce_int(legacy_filters.get("overdue_days"))
+        if overdue_days is None:
+            return {"status": "error", "error": "Invalid overdue_days in filters"}
+
+    if limit == 20:
+        limit_source = page_size if page_size is not None else legacy_filters.get("limit")
+        if limit_source is not None:
+            parsed_limit = _coerce_int(limit_source)
+            if parsed_limit is None:
+                return {"status": "error", "error": "Invalid limit/page_size value"}
+            limit = parsed_limit
+
+    if offset == 0:
+        offset_source = page_token if page_token is not None else legacy_filters.get("offset")
+        if offset_source is not None:
+            parsed_offset = _parse_legacy_offset(offset_source)
+            if parsed_offset is None:
+                return {"status": "error", "error": "Invalid offset/page_token value"}
+            offset = parsed_offset
+
+    if limit < 1:
+        return {"status": "error", "error": "limit must be >= 1"}
+    if offset < 0:
+        return {"status": "error", "error": "offset must be >= 0"}
+    if active_recent_days is not None and active_recent_days < 0:
+        return {"status": "error", "error": "active_recent_days must be >= 0"}
+    if overdue_days is not None and overdue_days < 0:
+        return {"status": "error", "error": "overdue_days must be >= 0"}
+
+    base_filters: Dict[str, Any] = {"o": "-updated"}
     if product_id:
-        filters["product"] = product_id
+        base_filters["product"] = product_id
     if status:
-         # Validate against known API statuses if necessary
-        valid_statuses = ["Not Started", "Blocked", "Cancelled", "Completed", "In Progress", "On Hold", "Waiting for Resource"]
-        if status not in valid_statuses:
-             return {"status": "error", "error": f"Invalid status filter '{status}'. Must be one of: {', '.join(valid_statuses)}"}
-        filters["status"] = status
+        if status not in VALID_ENGAGEMENT_STATUSES:
+            return {
+                "status": "error",
+                "error": (
+                    f"Invalid status filter '{status}'. Must be one of: "
+                    f"{', '.join(VALID_ENGAGEMENT_STATUSES)}"
+                ),
+            }
+        base_filters["status"] = status
     if name:
-        filters["name"] = name # Or name__icontains if supported
-    if offset:
-        filters["offset"] = offset
+        base_filters["name"] = name  # Or name__icontains if supported
 
     client = get_client()
-    result = await client.get_engagements(filters)
 
-    if "error" in result:
-        return {"status": "error", "error": result["error"], "details": result.get("details", "")}
+    use_post_filter = stale_only or active_recent_days is not None or overdue_days is not None
+    if not use_post_filter:
+        filters = dict(base_filters)
+        filters["limit"] = limit
+        if offset:
+            filters["offset"] = offset
 
-    return {"status": "success", "data": result}
+        result = await client.get_engagements(filters)
+        if "error" in result:
+            return {"status": "error", "error": result["error"], "details": result.get("details", "")}
+        return {"status": "success", "data": result}
+
+    # Post-filter mode: scan all sorted pages and apply local derived filters.
+    scan_limit = 100
+    scan_offset = 0
+    filtered_results: List[Dict[str, Any]] = []
+    now_utc = datetime.now(timezone.utc)
+
+    while True:
+        scan_filters = dict(base_filters)
+        scan_filters["limit"] = scan_limit
+        scan_filters["offset"] = scan_offset
+
+        result = await client.get_engagements(scan_filters)
+        if "error" in result:
+            return {"status": "error", "error": result["error"], "details": result.get("details", "")}
+
+        page_results = result.get("results", [])
+        if not page_results:
+            break
+
+        for engagement in page_results:
+            if _matches_derived_filters(
+                engagement,
+                now_utc,
+                stale_only,
+                active_recent_days,
+                overdue_days,
+            ):
+                filtered_results.append(engagement)
+
+        if not result.get("next"):
+            break
+        scan_offset += scan_limit
+
+    total_count = len(filtered_results)
+    paged_results = filtered_results[offset:offset + limit]
+    response_data = {
+        "count": total_count,
+        "next": None,
+        "previous": None,
+        "results": paged_results,
+    }
+    if offset + limit < total_count:
+        response_data["next"] = f"offset={offset + limit}&limit={limit}"
+    if offset > 0:
+        prev_offset = max(offset - limit, 0)
+        response_data["previous"] = f"offset={prev_offset}&limit={limit}"
+
+    response: Dict[str, Any] = {"status": "success", "data": response_data}
+    applied = _build_applied_filters(
+        product_id=product_id,
+        status=status,
+        name=name,
+        stale_only=stale_only,
+        active_recent_days=active_recent_days,
+        overdue_days=overdue_days,
+    )
+    if applied:
+        response["applied_filters"] = applied
+    return response
 
 
 async def get_engagement(engagement_id: int) -> Dict[str, Any]:
@@ -84,10 +396,11 @@ async def create_engagement(product_id: int, name: str, target_start: str, targe
         JSON response from the API.
     """
     # endpoint = "/api/v2/engagements/" # Endpoint handled by client method
-    valid_statuses = ["Not Started", "Blocked", "Cancelled", "Completed", "In Progress", "On Hold", "Waiting for Resource"]
-    if status not in valid_statuses:
+    if status not in VALID_ENGAGEMENT_STATUSES:
         # Use raise ValueError for internal validation errors
-        raise ValueError(f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}")
+        raise ValueError(
+            f"Invalid status '{status}'. Must be one of: {', '.join(VALID_ENGAGEMENT_STATUSES)}"
+        )
 
     # Validate engagement_type if provided
     if engagement_type and engagement_type not in ["Interactive", "CI/CD"]:
@@ -159,9 +472,14 @@ async def update_engagement(engagement_id: int, name: Optional[str] = None,
     """
     # Validate status if provided
     if status:
-        valid_statuses = ["Not Started", "Blocked", "Cancelled", "Completed", "In Progress", "On Hold", "Waiting for Resource"]
-        if status not in valid_statuses:
-             return {"status": "error", "error": f"Invalid status '{status}'. Must be one of: {', '.join(valid_statuses)}"}
+        if status not in VALID_ENGAGEMENT_STATUSES:
+            return {
+                "status": "error",
+                "error": (
+                    f"Invalid status '{status}'. Must be one of: "
+                    f"{', '.join(VALID_ENGAGEMENT_STATUSES)}"
+                ),
+            }
 
     # Validate engagement_type if provided
     if engagement_type and engagement_type not in ["Interactive", "CI/CD"]:
